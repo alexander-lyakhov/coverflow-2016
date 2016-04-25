@@ -9,18 +9,23 @@
         }
 
         var KEY = {
-            END:   35,
-            HOME:  36,
-            LEFT:  37,
-            RIGHT: 39,
-            UP:    38,
-            DOWN:  40
+            ENTER:  13,
+            ESCAPE: 27,
+            END:    35,
+            HOME:   36,
+            LEFT:   37,
+            RIGHT:  39,
+            UP:     38,
+            DOWN:   40
         };
 
         var images = {
-
             data: [],
             currentIndex: 0
+        };
+
+        var flags = {
+            freeze: 0
         };
 
         var $body = $('body');
@@ -92,6 +97,24 @@
                 })
                 .on('keydown', function(e)
                 {
+                    if (e.keyCode === KEY.ENTER)
+                    {
+                        flags.freeze = 1;
+
+                        $coverflow
+                            .find('.cover-center')
+                            .addClass('cover-zoom-in');
+                    }
+
+                    if (e.keyCode === KEY.ESCAPE)
+                    {
+                        flags.freeze = 0;
+
+                        $coverflow
+                            .find('.cover-center')
+                            .removeClass('cover-zoom-in');
+                    }
+
                     if (e.keyCode === KEY.LEFT) {
                         _this.moveLeft();
                     }
@@ -111,7 +134,7 @@
         //==================================================================================
         this.moveLeft = function moveLeft()
         {
-            if (images.currentIndex > 0)
+            if (images.currentIndex > 0 && !flags.freeze)
             {
                 this.scrollRight();
 
@@ -130,7 +153,7 @@
         //==================================================================================
         this.moveRight = function moveRight()
         {
-            if (images.currentIndex + 1 < images.data.length)
+            if (images.currentIndex + 1 < images.data.length && !flags.freeze)
             {
                 this.scrollLeft();
                 this.addToBack(images.data[images.currentIndex + 3]);

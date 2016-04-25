@@ -70,6 +70,11 @@ a {
     z-index: 1;
 }
 
+.cover-zoom-in {
+    transform: scale(1.5, 1.5);
+    transition: transform 0.3s;
+}
+
 .cover-left {
     transform: translateX(-320px) rotateY(45deg) scale(0.65, 0.65);
     opacity: 1;
