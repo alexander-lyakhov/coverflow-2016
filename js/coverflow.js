@@ -197,38 +197,32 @@
         //==================================================================================
         //
         //==================================================================================
-        this.addToFront = function addToFront(img)
+        this.createCover = function createCover(img, className)
         {
-            if (!img) return this;
-
             var image = new Image();
                 image.src = img.src;
-                image.width = 400;
+                image.width = 640;
 
-            var $cover = $('<div class="cover cover-left-edge"></div>');
-                $cover.prepend(image);
+            var $cover = $('<div class="cover ' + className + '"></div>');
+                $cover.append(image);
 
             $coverflow.append($cover);
 
-            return this;
+            return $cover;
         }
 
         //==================================================================================
         //
         //==================================================================================
+        this.addToFront = function addToFront(img)
+        {
+            img && $coverflow.prepend(this.createCover(img, 'cover-left-edge'));
+            return this;
+        }
+
         this.addToBack = function addToBack(img)
         {
-            if (!img) return this;
-
-            var image = new Image();
-                image.src = img.src;
-                image.width = 400;
-
-            var $cover = $('<div class="cover cover-right-edge"></div>');
-                $cover.append(image);
-
-            $coverflow.append($cover);
-
+            img && $coverflow.append(this.createCover(img, 'cover-right-edge'));
             return this;
         }
     };
