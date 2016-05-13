@@ -1,6 +1,11 @@
 ﻿window.app = window.app || {};
 
-(function($) {
+(function(app, $) {
+
+    var SERVICES = {
+        FEED: 'https://api.instagram.com/v1/users/self/feed'
+        //FEED: 'https://api.instagram.com/v1/users/self/feed?access_token=425749291.1fb234f.569ec48fcce04e9db17a73b1abf38876&max_id=1245834544335779392_374940732&_=1462980560419'
+    };
 
     app.Coverflow = function Coverflow($element)
     {
@@ -20,9 +25,30 @@
         };
 
         var images = {
+
             data: [],
-            currentIndex: 0
+            currentIndex: 0,
+            remainToLoad: 0,
+
+            createImage: function(src)
+            {
+                var image = new Image(640, 640);
+                    image.src = src || '';
+                    image.onload = $.proxy(this.onImageLoadHandler, this);
+
+                return image;
+            },
+
+            onImageLoadHandler: function()
+            {
+                if(--this.remainToLoad === 0) {
+                    $(this).trigger('allImagesLoaded');
+                }
+            }
         };
+
+        var pagination = null;
+        var dataset = [];
 
         var flags = {
             freeze: 0
@@ -30,20 +56,17 @@
 
         var $body = $('body');
         var $coverflow = $('.cover-container');
+        var $description = $('.description span');
 
-        var classList = [
-            'cover-left-edge',
-            'cover-left',
-            'cover-center',
-            'cover-right',
-            'cover-right-edge'
-        ];
+        var user = app.User();
+        var spinner = app.Spinner();
 
         //==================================================================================
         //
         //==================================================================================
         this.init = function init()
         {
+            /*
             images.data.push(
                 this.createImage('img/01.jpg'),
                 this.createImage('img/02.jpg'),
@@ -53,35 +76,92 @@
                 this.createImage('img/06.jpg'),
                 this.createImage('img/07.jpg')
             );
+            */
 
-            images.currentIndex = 0;
-
-            var size = images.data.length < 3 ? images.data.length:3;
-
-            for (var i = 0; i < size; i++)
-            {
-                this.shiftLeft()
-                this.addToBack(images.data[i]);
-            }
-
-            /*
-             *  If less then 3 images in set then move existing images close to center
-             */
-            for (; i++ < 3; this.shiftLeft());
-
-            return this.bindEvents();
+            return this.bindEvents().getData();
         };
 
         //==================================================================================
         //
         //==================================================================================
-        this.createImage = function createImage(src)
+        this.getData = function getData()
         {
-            var image = new Image();
-                image.src = src || '';
+            var _this = this;
 
-            return image;
-        }
+            var url = SERVICES.FEED + '?access_token=' + user.info.accessToken;
+
+            if (pagination && pagination.next_url) {
+                url += '&max_id=' + pagination.next_max_id;
+            }
+
+            console.debug(url);
+
+            $.ajax({
+                method: "GET",
+                url: url,
+                dataType: 'jsonp',
+
+                beforeSend: function()
+                {
+                    flags.freeze = 1;
+                    spinner.show();
+                },
+
+                success: function(result, status, jqXHR)
+                {
+                    dataset.length ?
+                        dataset.push(result.data):
+                        dataset = result.data;
+
+                    _this.setImages(result);
+                    console.log('success', pagination, result);
+                },
+
+                error: function(jqXHR, textStatus, errorThrown) {
+                    console.log('error');
+                }
+            });
+        };
+
+        //==================================================================================
+        //
+        //==================================================================================
+        this.setImages = function setImages(dataset)
+        {
+            dataset = dataset || {data:[]};
+
+            images.remainToLoad = dataset.data.length;
+
+            dataset.data.forEach(function(item)
+            {
+                images.data.push(
+                    images.createImage(item.images.standard_resolution.url)
+                );
+            });
+
+            var size = images.data.length < 3 ? images.data.length:3;
+
+            /*
+             *  Will execute for 1st set of images only
+             */
+            if (!pagination)
+            {
+                for (var i = 0; i < size; i++)
+                {
+                    this.shiftLeft()
+                    this.addToBack(images.data[i]);
+                }
+
+                /*
+                 *  If less then 3 images in set then move existing images close to center
+                 */
+                for (; i++ < 3; this.shiftLeft());
+            }
+
+            pagination = dataset.pagination;
+
+            return this;
+        };
 
         //==================================================================================
         //
@@ -90,40 +170,35 @@
         {
             var _this = this;
 
+            $(images).on('allImagesLoaded', function()
+            {
+                flags.freeze = 0;
+                spinner.hide();
+            });
+
             $body
-                .on('click', function(e)
-                {
+                .on('click', function(e) {
                     console.log(e);
                 })
                 .on('keydown', function(e)
                 {
-                    if (e.keyCode === KEY.ENTER)
-                    {
-                        flags.freeze = 1;
-
-                        $coverflow
-                            .find('.cover-center')
-                            .addClass('cover-zoom-in');
+                    if (e.keyCode === KEY.ENTER) {
+                        _this.zoomIn();
                     }
 
-                    if (e.keyCode === KEY.ESCAPE)
-                    {
-                        flags.freeze = 0;
-
-                        $coverflow
-                            .find('.cover-center')
-                            .removeClass('cover-zoom-in');
+                    if (e.keyCode === KEY.ESCAPE) {
+                        _this.zoomOut();
                     }
 
                     if (e.keyCode === KEY.LEFT) {
-                        _this.moveLeft();
+                        _this.moveBackward();
                     }
 
                     if (e.keyCode === KEY.RIGHT) {
-                        _this.moveRight();
+                        _this.moveForward();
                     }
 
-                    console.log(images.currentIndex, $coverflow.children().length);
+                    //console.log(images.currentIndex, $coverflow.children().length);
                 });
 
             return this;
@@ -132,11 +207,17 @@
         //==================================================================================
         //
         //==================================================================================
-        this.moveLeft = function moveLeft()
+        this.moveBackward = function moveBackward()
         {
             if (images.currentIndex > 0 && !flags.freeze)
             {
                 this.scrollRight();
+
+                $description.text('');
+
+                setTimeout(function() {
+                    $description.html(dataset[images.currentIndex].caption.text);
+                }, 600);
 
                 if (images.currentIndex > 2) {
                     this.addToFront(images.data[images.currentIndex - 3]);
@@ -151,7 +232,7 @@
         //==================================================================================
         //
         //==================================================================================
-        this.moveRight = function moveRight()
+        this.moveForward = function moveForward()
         {
             if (images.currentIndex + 1 < images.data.length && !flags.freeze)
             {
@@ -159,6 +240,16 @@
                 this.addToBack(images.data[images.currentIndex + 3]);
 
                 images.currentIndex++;
+
+                $description.text('');
+
+                setTimeout(function() {
+                    $description.html(dataset[images.currentIndex].caption.text);
+                }, 600);
+
+                if (pagination && images.currentIndex === images.data.length - 3) {
+                    this.getData();
+                }
             }
 
             return this;
@@ -225,9 +316,29 @@
             img && $coverflow.append(this.createCover(img, 'cover-right-edge'));
             return this;
         }
+
+        //==================================================================================
+        //
+        //==================================================================================
+        this.zoomIn = function zoomIn()
+        {
+            flags.freeze = 1;
+            $coverflow.find('.cover-center').addClass('cover-zoom-in');
+
+            return this;
+        };
+
+        this.zoomOut = function zoomOut()
+        {
+            flags.freeze = 0;
+            $coverflow.find('.cover-center').removeClass('cover-zoom-in');
+
+            return this;
+        };
     };
 
     var coverFlow = new app.Coverflow('.cover-container');
         coverFlow.init();
 
-})(jQuery);
+
+})(window.app, jQuery);
